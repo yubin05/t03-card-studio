@@ -436,7 +436,12 @@
     }
   }
   function persistTemplates(list){
-    try{ localStorage.setItem(TPL_KEY, JSON.stringify(list)); }catch(e){ /* 저장 실패 무시 */ }
+    try{
+      localStorage.setItem(TPL_KEY, JSON.stringify(list));
+      return true;
+    }catch(e){
+      return false; // 용량 초과 등으로 저장 실패 — 호출한 쪽에서 반드시 확인해야 함
+    }
   }
   function makeId(){
     return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -510,12 +515,18 @@
       return;
     }
     var t = templateFromState(makeId(), name);
-    templates.push(t);
-    persistTemplates(templates);
-    renderTemplateList();
-    tplMsg.textContent = "\"" + name + "\" 템플릿을 저장했습니다.";
-    tplMsg.className = "msg ok";
-    tplNameInput.value = "";
+    var next = templates.concat([t]);
+    if(persistTemplates(next)){
+      templates = next;
+      renderTemplateList();
+      tplMsg.textContent = "\"" + name + "\" 템플릿을 저장했습니다.";
+      tplMsg.className = "msg ok";
+      tplNameInput.value = "";
+    }else{
+      renderTemplateList(); // 저장 실패 시 화면은 실제 저장된 상태(기존 목록)로 되돌림
+      tplMsg.textContent = "저장 공간이 부족해서 템플릿을 저장하지 못했습니다. 이미지 용량을 줄이거나 다른 템플릿을 정리해주세요.";
+      tplMsg.className = "msg error";
+    }
   });
 
   function findTemplate(id){
@@ -567,10 +578,16 @@
     if(!t) return;
     var updated = templateFromState(id, t.name);
     var idx = templates.findIndex(function(x){ return x.id === id; });
-    templates[idx] = updated;
-    persistTemplates(templates);
-    tplMsg.textContent = "\"" + t.name + "\" 템플릿을 현재 편집 내용으로 수정했습니다.";
-    tplMsg.className = "msg ok";
+    var next = templates.slice();
+    next[idx] = updated;
+    if(persistTemplates(next)){
+      templates = next;
+      tplMsg.textContent = "\"" + t.name + "\" 템플릿을 현재 편집 내용으로 수정했습니다.";
+      tplMsg.className = "msg ok";
+    }else{
+      tplMsg.textContent = "저장 공간이 부족해서 수정 내용을 저장하지 못했습니다. 이전 내용이 유지됩니다.";
+      tplMsg.className = "msg error";
+    }
     renderTemplateList();
   }
 
@@ -619,11 +636,15 @@
         jsonMsg.className = "msg error";
         return;
       }
-      templates = parsed;
-      persistTemplates(templates);
-      renderTemplateList();
-      jsonMsg.textContent = "템플릿 " + templates.length + "개를 가져왔습니다.";
-      jsonMsg.className = "msg ok";
+      if(persistTemplates(parsed)){
+        templates = parsed;
+        renderTemplateList();
+        jsonMsg.textContent = "템플릿 " + templates.length + "개를 가져왔습니다.";
+        jsonMsg.className = "msg ok";
+      }else{
+        jsonMsg.textContent = "가져오기 실패: 저장 공간이 부족합니다. 기존 템플릿을 그대로 유지합니다.";
+        jsonMsg.className = "msg error";
+      }
     };
     reader.onerror = function(){
       jsonMsg.textContent = "가져오기 실패: 파일을 읽을 수 없습니다. 기존 템플릿을 그대로 유지합니다.";
